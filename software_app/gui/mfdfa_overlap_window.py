@@ -1,6 +1,5 @@
 # file: gui/mfdfa_overlap_window.py
 # ----------------------------------------------------------------------
-# 2025-04-18 — fast overlap save
 #   • Excel summaries (H & Hq) in one file
 #   • parallel image encoding (JPEG/WebP/PNG) with TurboJPEG if available
 #   • optional flat images folder to reduce filesystem overhead
@@ -612,3 +611,4 @@ class MFDFAOverlapWindow(QDialog):
                 f"Saved {len(self.batch_results)} chunks → {top_dir}\n"
                 "Summary: (failed)"
             )
+
