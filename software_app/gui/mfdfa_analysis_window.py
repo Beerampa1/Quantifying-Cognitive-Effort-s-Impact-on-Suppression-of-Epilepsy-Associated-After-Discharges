@@ -1,3 +1,4 @@
+# file: gui/mfdfa_analysis_window.py
 import os
 import numpy as np
 from PyQt5.QtWidgets import (
