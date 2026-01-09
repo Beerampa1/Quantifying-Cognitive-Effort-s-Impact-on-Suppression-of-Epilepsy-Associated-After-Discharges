@@ -5,12 +5,12 @@ This repository contains the full analysis pipeline used to study how cognitive 
 
 It includes code to reproduce the paper’s end-to-end workflow:
 
-Data loading and preprocessing
+1)Data loading and preprocessing
 
-After-discharge time-window handling and trial segmentation
+2)After-discharge time-window handling and trial segmentation
 
-Feature extraction (including DFA / MF-DFA and FODN-based network features)
+3)Feature extraction (including DFA / MF-DFA and FODN-based network features)
 
-Model training and evaluation (e.g., logistic regression baseline)
+4)Model training and evaluation (e.g., logistic regression baseline)
 
-GUI tools for interactive analysis and batch processing
+5)GUI tools for interactive analysis and batch processing
