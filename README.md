@@ -31,3 +31,66 @@ All components are accessible through a **GUI-driven application**, enabling bot
 
 ```bash
 python main.py
+
+
+## Route Selector (GUI Navigation)
+
+The **Route Selector** is the main entry point of the application and allows users to choose between multiple analysis and processing paths:
+
+- **Process Route**  
+  → Interactive, trial-level signal exploration
+
+- **Feature Extraction Route**  
+  → Batch feature generation across all trials
+
+- **FODN / DFA / MF-DFA Post-Processing**  
+  → Visualization and statistical summaries
+
+- **MF-DFA Overlapping Analysis**  
+  → Sliding-window fractal analysis
+
+- **Model Training Route**  
+  → Train and evaluate machine-learning classifiers
+
+---
+
+## Interactive Processing Route (Trial-Level)
+
+### Main Files
+- `gui/main_gui.py`
+- `gui/channel_plot_window.py`
+- `gui/analysis_window.py`
+
+### Workflow
+1. Load **Excel trial metadata**
+2. Load **iEEG H5 file**
+3. Select a **patient trial**
+4. Visualize raw signals and individual channels
+5. Launch advanced analyses:
+   - DFA / MF-DFA analysis
+   - Overlapping MF-DFA windows
+   - FODN network analysis
+
+This route is intended for **manual inspection**, **parameter tuning**, and **exploratory analysis**.
+
+---
+
+## Feature Extraction (Batch Processing)
+
+### Main Files
+- `gui/feature_extraction_window.py`
+- `utils/feature_extractor.py`
+- `utils/file_utils.py`
+
+### What It Does
+- Iterates over **all trials**
+- Loads precomputed results:
+  - FODN outputs
+  - DFA / MF-DFA outputs
+- Extracts:
+  - Global summary features
+  - Top-K channel-level features
+- Produces a unified dataset:
+
+```text
+master_features.csv
