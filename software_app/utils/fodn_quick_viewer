@@ -1,0 +1,269 @@
+#!/usr/bin/env python
+"""
+fodn_quickview_gui.py
+
+Small standalone viewer to:
+  1) Let the user SELECT an HDF5/HD5 file via a file dialog.
+  2) Load a 2D dataset (channels × time or time × channels).
+  3) Fit the FODN model (fracOrdUU from utils.fodn_code).
+  4) Plot:
+        - Coupling matrix A heat map
+        - Dominant eigenvector (magnitude) heat map
+
+Requirements:
+    - utils/fodn_code.py with class fracOrdUU
+    - h5py, numpy, matplotlib, scipy
+
+Run:
+    python fodn_quickview_gui.py
+"""
+
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+import h5py
+import scipy.linalg as LA
+
+
+from fodn_code import fracOrdUU
+
+# For file dialog
+import tkinter as tk
+from tkinter import filedialog, messagebox
+
+
+# ---------------------------------------------------------------------
+# HDF5 helpers
+# ---------------------------------------------------------------------
+def find_first_2d_dataset(h5file):
+    """Recursively search for the first 2D dataset in an HDF5 file."""
+    def _recurse(group, prefix=""):
+        for name, obj in group.items():
+            path = f"{prefix}/{name}" if prefix else name
+            if isinstance(obj, h5py.Dataset) and obj.ndim == 2:
+                return obj, path
+            if isinstance(obj, h5py.Group):
+                ds, p = _recurse(obj, path)
+                if ds is not None:
+                    return ds, p
+        return None, None
+
+    return _recurse(h5file)
+
+
+def find_first_1d_string_dataset(h5file):
+    """Try to find a 1D dataset of strings to use as channel names."""
+    def _recurse(group):
+        for _, obj in group.items():
+            if isinstance(obj, h5py.Dataset) and obj.ndim == 1:
+                if obj.dtype.kind in ("O", "S", "U"):
+                    return obj[()]
+            if isinstance(obj, h5py.Group):
+                out = _recurse(obj)
+                if out is not None:
+                    return out
+        return None
+
+    return _recurse(h5file)
+
+
+def load_hdf5_signals(h5_path):
+    """
+    Load signals and (optionally) channel names from an HDF5/HD5 file.
+
+    Returns
+    -------
+    X : np.ndarray, shape (num_channels, num_samples)
+    channel_names : list of str
+    used_path : str
+        The dataset path inside the HDF5 file.
+    """
+    with h5py.File(h5_path, "r") as f:
+        dset, used_path = find_first_2d_dataset(f)
+        if dset is None:
+            raise ValueError("No 2D dataset found in the HDF5 file.")
+
+        X = np.array(dset[()], dtype=float)
+
+        # Try to find channel names
+        names_raw = find_first_1d_string_dataset(f)
+        channel_names = None
+        if names_raw is not None:
+            channel_names = [
+                n.decode("utf-8") if isinstance(n, bytes) else str(n)
+                for n in names_raw
+            ]
+
+    # Ensure X is (channels, time)
+    if X.shape[0] < X.shape[1]:
+        # assume (channels, time)
+        num_ch = X.shape[0]
+    else:
+        # assume (time, channels)
+        X = X.T
+        num_ch = X.shape[0]
+
+    if channel_names is None or len(channel_names) != num_ch:
+        channel_names = [f"Ch{i}" for i in range(num_ch)]
+
+    return X, channel_names, used_path
+
+
+# ---------------------------------------------------------------------
+# FODN fitting and plotting
+# ---------------------------------------------------------------------
+def fit_fodn(X, numInp=None, numFract=50, niter=10, lambdaUse=0.5, verbose=1):
+    """
+    Fit the fracOrdUU FODN model to data X.
+
+    Parameters
+    ----------
+    X : np.ndarray, shape (num_channels, num_samples)
+
+    Returns
+    -------
+    model : fracOrdUU instance
+    A_final : np.ndarray, shape (N, N)
+        Final coupling matrix after the last iteration.
+    """
+    if numInp is None:
+        model = fracOrdUU(numFract=numFract, niter=niter,
+                          lambdaUse=lambdaUse, verbose=verbose)
+    else:
+        model = fracOrdUU(numInp=numInp, numFract=numFract,
+                          niter=niter, lambdaUse=lambdaUse, verbose=verbose)
+
+    model.fit(X)
+    A_final = model._AMat[-1, :, :]
+    return model, A_final
+
+
+def plot_A_and_eigen_heatmaps(A, channel_names, out_prefix="fodn", show=True):
+    """
+    Plot:
+      1) Coupling matrix A as a heat map.
+      2) Dominant eigenvector magnitude as a 1×N heat map.
+
+    Also saves:
+      out_prefix + "_A_heatmap.png"
+      out_prefix + "_eigvec_heatmap.png"
+    """
+    N = A.shape[0]
+
+    # dominant eigenvector of A
+    w, v = LA.eig(A)
+    idx_dom = np.argmax(np.abs(w))
+    eigvec = np.real(v[:, idx_dom])
+    mag = np.abs(eigvec)
+    mag_norm = (mag - mag.min()) / (mag.max() - mag.min() + 1e-31)
+
+    # --- A matrix heatmap ---
+    fig1, ax1 = plt.subplots(figsize=(6, 5))
+    im1 = ax1.imshow(A, cmap="coolwarm", aspect="equal")
+    ax1.set_title("FODN Coupling Matrix $A$")
+    ax1.set_xlabel("Channel")
+    ax1.set_ylabel("Channel")
+    if len(channel_names) == N:
+        ax1.set_xticks(np.arange(N))
+        ax1.set_yticks(np.arange(N))
+        ax1.set_xticklabels(channel_names, rotation=90, fontsize=6)
+        ax1.set_yticklabels(channel_names, fontsize=6)
+    plt.colorbar(im1, ax=ax1, fraction=0.046, pad=0.04)
+    fig1.tight_layout()
+    fig1.savefig(out_prefix + "_A_heatmap.png", dpi=150)
+
+    # --- eigenvector heatmap (1 × N) ---
+    fig2, ax2 = plt.subplots(figsize=(6, 2))
+    im2 = ax2.imshow(mag_norm[np.newaxis, :], cmap="viridis",
+                     aspect="auto", vmin=0, vmax=1)
+    ax2.set_title("Dominant Eigenvector Magnitude (normalized)")
+    ax2.set_yticks([])
+    ax2.set_xlabel("Channel")
+    if len(channel_names) == N:
+        ax2.set_xticks(np.arange(N))
+        ax2.set_xticklabels(channel_names, rotation=90, fontsize=6)
+    plt.colorbar(im2, ax=ax2, fraction=0.046, pad=0.4)
+    fig2.tight_layout()
+    fig2.savefig(out_prefix + "_eigvec_heatmap.png", dpi=150)
+
+    if show:
+        plt.show()
+    else:
+        plt.close(fig1)
+        plt.close(fig2)
+
+
+# ---------------------------------------------------------------------
+# GUI file selection + main
+# ---------------------------------------------------------------------
+def main():
+    # Use Tk just for file selection; no full GUI.
+    root = tk.Tk()
+    root.withdraw()
+
+    messagebox.showinfo(
+        "FODN quick viewer",
+        "Select an HDF5/HD5 file containing your signals (2D dataset)."
+    )
+
+    file_path = filedialog.askopenfilename(
+        title="Select HDF5/HD5 file",
+        filetypes=[("HDF5 files", "*.h5 *.hdf5 *.hd5 *.hdf"),
+                   ("All files", "*.*")]
+    )
+
+    if not file_path:
+        print("No file selected. Exiting.")
+        return
+
+    if not os.path.isfile(file_path):
+        messagebox.showerror("Error", f"File not found:\n{file_path}")
+        return
+
+    print(f"[FODN] Selected file: {file_path}")
+
+    try:
+        X, ch_names, used_path = load_hdf5_signals(file_path)
+    except Exception as e:
+        messagebox.showerror("HDF5 Error", f"Failed to load data:\n{e}")
+        return
+
+    print(f"[FODN] Using dataset: {used_path}, shape={X.shape}")
+    print(f"[FODN] Number of channels: {len(ch_names)}")
+
+    # You can tweak these defaults if you like:
+    numFract = 50
+    niter = 10
+    lambdaUse = 0.5
+    numInp = None  # default = num_channels/2 inside fracOrdUU
+
+    print("[FODN] Fitting model...")
+    try:
+        model, A_final = fit_fodn(
+            X,
+            numInp=numInp,
+            numFract=numFract,
+            niter=niter,
+            lambdaUse=lambdaUse,
+            verbose=1,
+        )
+    except Exception as e:
+        messagebox.showerror("FODN Error", f"FODN fitting failed:\n{e}")
+        return
+
+    prefix = os.path.splitext(os.path.basename(file_path))[0] + "_fodn"
+    print("[FODN] Plotting A and dominant eigenvector heatmaps...")
+    plot_A_and_eigen_heatmaps(A_final, ch_names, out_prefix=prefix, show=True)
+
+    # Simple console interpretation:
+    if hasattr(model, "_order") and len(model._order) == A_final.shape[0]:
+        print("\n[Summary] Fractional orders (alpha) per channel:")
+        print("  mean α = {:.3f}, std α = {:.3f}".format(
+            np.mean(model._order), np.std(model._order)))
+    print("[Summary] A-matrix stats: min={:.3e}, max={:.3e}, mean={:.3e}".format(
+        A_final.min(), A_final.max(), A_final.mean()))
+    print(f"[FODN] Saved: {prefix}_A_heatmap.png and {prefix}_eigvec_heatmap.png")
+
+
+if __name__ == "__main__":
+    main()

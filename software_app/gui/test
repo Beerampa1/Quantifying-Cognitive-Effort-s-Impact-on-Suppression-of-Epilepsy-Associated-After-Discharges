@@ -1,0 +1,89 @@
+import re
+from decimal import Decimal, ROUND_HALF_UP
+def _q(secs: float, dp: int) -> float:
+    q = Decimal(10) ** (-dp)
+    return float(Decimal(str(secs)).quantize(q, rounding=ROUND_HALF_UP))
+def _decimals_from_display(token: str, default: int = 1) -> int:
+    """How many decimals are shown on the seconds component in the *cell text*."""
+    if not isinstance(token, str):
+        return default
+    token = token.strip()
+    if not token:
+        return default
+    last = token.split(":")[-1]
+    if "." in last:
+        return max(0, len(last.split(".")[1]))
+    return 0
+
+def _to_float(v: str) -> float:
+    return float(Decimal(v))
+def parse_excel_display_to_seconds(raw, *, default_dp: int = 1, within_hour: bool = True):
+    """
+    Parse the *cell display text* (what pandas read from Excel) to (seconds, dp).
+    - If string looks like time-of-day (AM/PM or HH:MM:SS), compute seconds *within the hour*
+      when within_hour=True (matches Excel 'mm:ss' display).
+    Returns (secs_snapped, dp) or (None, None) for blanks/unparsable.
+    """
+    if raw is None:
+        return None, None
+    s = str(raw).strip()
+    if s == "" or s.upper() in {"NA", "N/A", "-", "--"}:
+        return None, None
+
+    # Keep the *full* string for AM/PM detection, but make a token for pattern checks.
+    token = s.split()[0]  # first chunk only
+    if token == "":
+        return None, None
+
+    # If cell does not show decimals, fall back to default_dp (usually 1).
+    dp_seen = _decimals_from_display(token, default=default_dp)
+    dp = dp_seen if dp_seen > 0 else default_dp
+
+    # --- AM/PM time-of-day: e.g. "2:13:15 PM", "2:13 PM"
+    m_ampm = re.match(r"^\s*(\d{1,2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?\s*([AP]M)\s*$", s, re.IGNORECASE)
+    if m_ampm:
+        h = int(m_ampm.group(1)); m = int(m_ampm.group(2))
+        sec_s = m_ampm.group(3); frac = m_ampm.group(4) or "0"
+        ss = _to_float(f"{sec_s or '0'}.{frac}") if (sec_s or frac != "0") else float(sec_s or 0)
+        # Excel 'mm:ss' ignores hours → seconds within the hour:
+        secs = m*60 + ss if within_hour else h*3600 + m*60 + ss
+        return _q(secs, dp), dp
+
+    # --- HH:MM:SS(.fff)  (24h or duration with hours)
+    m_hms = re.match(r"^\s*(\d{1,2}):(\d{2}):(\d{2})(?:\.(\d+))?\s*$", token)
+    if m_hms:
+        h = int(m_hms.group(1)); m = int(m_hms.group(2))
+        sec_s = m_hms.group(3); frac = m_hms.group(4) or "0"
+        ss = _to_float(f"{sec_s}.{frac}") if frac != "0" else float(sec_s)
+        secs_total = h*3600 + m*60 + ss
+        secs = secs_total % 3600 if within_hour else secs_total
+        return _q(secs, dp), dp
+
+    # --- MM:SS(.fff)  (duration style)
+    m_ms = re.match(r"^\s*(\d{1,4}):(\d{2})(?:\.(\d+))?\s*$", token)
+    if m_ms:
+        m = int(m_ms.group(1)); sec_s = m_ms.group(2); frac = m_ms.group(3) or "0"
+        ss = _to_float(f"{sec_s}.{frac}") if frac != "0" else float(sec_s)
+        secs = m*60 + ss
+        return _q(secs, dp), dp
+
+    # --- SS(.fff)
+    m_s = re.match(r"^\s*(\d+)(?:\.(\d+))?\s*$", token)
+    if m_s:
+        sec_s = m_s.group(1); frac = m_s.group(2) or "0"
+        ss = _to_float(f"{sec_s}.{frac}") if frac != "0" else float(sec_s)
+        return _q(ss, dp), dp
+
+    return None, None
+
+tests = [
+    "2:13:15 PM",   # time-of-day, should become 795.0s within-hour
+    "2:13 PM",      # time-of-day (no seconds) -> 780.0s
+    "13:15.0",      # minutes:seconds -> 795.0s
+    "12:42.86",     # minutes:seconds -> 762.86s
+    "00:13:15.49",  # HH:MM:SS -> within-hour 795.49s
+]
+
+for s in tests:
+    secs, dp = parse_excel_display_to_seconds(s, default_dp=1, within_hour=True)
+    print(f"{s:>12} -> {secs} s (dp={dp})")
