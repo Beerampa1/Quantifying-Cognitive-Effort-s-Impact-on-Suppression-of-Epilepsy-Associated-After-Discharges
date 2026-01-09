@@ -31,7 +31,7 @@ All components are accessible through a **GUI-driven application**, enabling bot
 
 ```bash
 python main.py
-```bash
+```
 
 ## Route Selector (GUI Navigation)
 
