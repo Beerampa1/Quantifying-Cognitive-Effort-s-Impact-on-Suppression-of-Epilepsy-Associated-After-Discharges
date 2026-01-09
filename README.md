@@ -158,3 +158,8 @@ These analyses capture **scale-dependent signal complexity** in iEEG recordings.
 
 This route validates whether extracted features can **predict AD suppression under cognitive effort**.
 
+
+## Key Findings Summary
+
+This study shows that cognitive effort has a measurable and meaningful impact on suppressing epilepsy-associated after-discharges (ADs) in intracranial EEG recordings. We found that fractional-order exponents (α), dominant network eigenvectors, and Hurst exponents all change systematically before and after cognitive questioning, indicating that both the temporal complexity of brain signals and the underlying network structure are sensitive to cognitive effort. When these features were combined in a logistic regression model, the system achieved 77% accuracy under leave-one-out cross-validation despite a limited number of trials, with no clear signs of overfitting. Together, these results suggest that cognitive processing influences AD suppression through distributed network mechanisms rather than isolated brain regions. Overall, the findings support the idea that cognitive effort can serve as a non-invasive, low-cost approach to modulating epileptic activity and provide a foundation for future work aimed at understanding when, where, and how cognitive engagement most effectively suppresses after-discharges.
+
