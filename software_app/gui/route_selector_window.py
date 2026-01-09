@@ -1,129 +1,154 @@
 # file: gui/route_selector_window.py
 
 import sys
-from PyQt5.QtWidgets import QApplication, QDialog, QVBoxLayout, QPushButton, QLabel, QMessageBox
+from PyQt5.QtWidgets import (
+    QApplication, QDialog, QVBoxLayout, QPushButton, QLabel, QMessageBox
+)
 from PyQt5.QtCore import Qt
 
-try:
-    from gui.main_gui import AppGUI  #existing main window
-except ImportError:
-    AppGUI = None
 
-try:
-    from gui.feature_extraction_window import FeatureExtractionWindow  # New window for feature extraction
-except ImportError:
-    FeatureExtractionWindow = None
-
-try:
-    from gui.fodn_post_window import FODNPostWindow  # New window for FODN plots
-except ImportError:
-    FODNPostWindow = None
-
-try:
-    from gui.dfa_post_window import DFAPostWindow  # New window for DFA plots
-except ImportError:
-    DFAPostWindow = None
-
-try:
-    from gui.mfdfa_overlap_window import MFDFAOverlapWindow
-except ImportError:
-    MFDFAOverlapWindow = None
+def _safe_import(path: str, name: str):
+    """
+    Import helper: returns attribute `name` from module `path`,
+    or None if anything fails.
+    """
+    try:
+        mod = __import__(path, fromlist=[name])
+        return getattr(mod, name, None)
+    except Exception:
+        return None
 
 
 
-try:
-    from gui.model_training_window import ModelTrainingWindow  # New window for model training
-except ImportError:
-    ModelTrainingWindow = None
+AppGUI = _safe_import("gui.main_gui", "AppGUI")
+FeatureExtractionWindow = _safe_import("gui.feature_extraction_window", "FeatureExtractionWindow")
+FODNPostWindow = _safe_import("gui.fodn_post_window", "FODNPostWindow")
+DFAPostWindow = _safe_import("gui.dfa_post_window", "DFAPostWindow")
+MFDFAOverlapWindow = _safe_import("gui.mfdfa_overlap_window", "MFDFAOverlapWindow")
+ModelTrainingWindow = _safe_import("gui.model_training_window", "ModelTrainingWindow")
+
 
 class RouteSelectorWindow(QDialog):
+    """
+    Simple launcher dialog. Improvements vs prior version:
+      - Centralized safe imports (less repeated try/except)
+      - Buttons disable themselves if the route isn't available
+      - Keeps references to opened windows to prevent GC closing them
+      - Consistent "show + close" flow
+    """
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Select Processing Route")
-        self.setMinimumSize(400, 300)
-        self.initUI()
-    
-    def initUI(self):
+        self.setMinimumSize(420, 320)
+
+        # Keep refs to opened windows so they stay alive
+        self._opened_windows = []
+
+        self._build_ui()
+
+    def _build_ui(self):
         layout = QVBoxLayout(self)
-        
+
         info_label = QLabel("Please choose a processing route:")
         info_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(info_label)
-        
+
         self.btn_current = QPushButton("Process Route")
         self.btn_feature = QPushButton("Feature Extraction Route")
-        self.btn_fodn_plots     = QPushButton("FODN Plots / Post‑proc")
-        self.btn_dfa_plots      = QPushButton("DFA / MFDFA Plots")
-        self.btn_mfdfa_overlap = QPushButton("MF DFA Overlapping Analysis")  # NEW
+        self.btn_fodn_plots = QPushButton("FODN Plots / Post-proc")
+        self.btn_dfa_plots = QPushButton("DFA / MF-DFA Plots")
+        self.btn_mfdfa_overlap = QPushButton("MF-DFA Overlapping Analysis")
         self.btn_model_training = QPushButton("Model Training Route")
-        
-        self.btn_current.setFixedHeight(40)
-        self.btn_feature.setFixedHeight(40)
-        self.btn_fodn_plots.setFixedHeight(40)
-        self.btn_dfa_plots.setFixedHeight(40)
-        self.btn_mfdfa_overlap.setFixedHeight(40)  
-        self.btn_model_training.setFixedHeight(40)
-        
-        layout.addWidget(self.btn_current)
-        layout.addWidget(self.btn_feature)
-        layout.addWidget(self.btn_fodn_plots)
-        layout.addWidget(self.btn_dfa_plots)
-        layout.addWidget(self.btn_mfdfa_overlap)
-        layout.addWidget(self.btn_model_training)
-        
+
+        for b in (
+            self.btn_current, self.btn_feature, self.btn_fodn_plots,
+            self.btn_dfa_plots, self.btn_mfdfa_overlap, self.btn_model_training
+        ):
+            b.setFixedHeight(40)
+            layout.addWidget(b)
+
+        # Wire clicks
         self.btn_current.clicked.connect(self.open_current_route)
         self.btn_feature.clicked.connect(self.open_feature_route)
         self.btn_fodn_plots.clicked.connect(self.open_fodn_plots)
         self.btn_dfa_plots.clicked.connect(self.open_dfa_plots)
         self.btn_mfdfa_overlap.clicked.connect(self.open_mfdfa_overlap)
         self.btn_model_training.clicked.connect(self.open_model_training)
-    
+
+        # Enable/disable based on availability
+        self._set_available(self.btn_current, AppGUI, "Main processing window (AppGUI) not available.")
+        self._set_available(self.btn_feature, FeatureExtractionWindow, "FeatureExtractionWindow not available.")
+        self._set_available(self.btn_fodn_plots, FODNPostWindow, "FODNPostWindow not available.")
+        self._set_available(self.btn_dfa_plots, DFAPostWindow, "DFAPostWindow not available.")
+        # Overlap window usually requires data; keep enabled if class exists
+        self._set_available(self.btn_mfdfa_overlap, MFDFAOverlapWindow, "MFDFAOverlapWindow not available.")
+        self._set_available(self.btn_model_training, ModelTrainingWindow, "ModelTrainingWindow not available.")
+
+    def _set_available(self, button: QPushButton, cls, missing_tip: str):
+        if cls is None:
+            button.setEnabled(False)
+            button.setToolTip(missing_tip)
+        else:
+            button.setEnabled(True)
+            button.setToolTip("")
+
+    def _open_window(self, win):
+        """Show window and keep reference to prevent premature close."""
+        self._opened_windows.append(win)
+        win.show()
+        self.close()
+
+    # ---------- routes ----------
     def open_current_route(self):
-        if AppGUI is not None:
-            self.current_route = AppGUI()
-            self.current_route.show()
-            self.close()
-        else:
-            QMessageBox.warning(self, "Error", "Current route window not available.")
-    
+        if AppGUI is None:
+            QMessageBox.warning(self, "Error", "Process Route window not available.")
+            return
+        self._open_window(AppGUI())
+
     def open_feature_route(self):
-        if FeatureExtractionWindow is not None:
-            self.batch_route = FeatureExtractionWindow()
-            self.batch_route.show()
-            self.close()
-        else:
+        if FeatureExtractionWindow is None:
             QMessageBox.warning(self, "Error", "Feature Extraction route window not available.")
-    
+            return
+        self._open_window(FeatureExtractionWindow())
+
     def open_fodn_plots(self):
-        self.fodn_win = FODNPostWindow(); self.fodn_win.show(); self.close()
+        if FODNPostWindow is None:
+            QMessageBox.warning(self, "Error", "FODN plots window not available.")
+            return
+        self._open_window(FODNPostWindow())
 
     def open_dfa_plots(self):
-        self.dfa_win = DFAPostWindow(); self.dfa_win.show(); self.close()
-    
+        if DFAPostWindow is None:
+            QMessageBox.warning(self, "Error", "DFA/MF-DFA plots window not available.")
+            return
+        self._open_window(DFAPostWindow())
+
     def open_mfdfa_overlap(self):
-      if MFDFAOverlapWindow is not None:
-        # The overlap window needs data; typically you open it from Channel Plot.
+        if MFDFAOverlapWindow is None:
+            QMessageBox.warning(self, "Error", "Overlapping MF-DFA window not available.")
+            return
+
+        # This window typically needs signals/time; guide user to the right place.
         QMessageBox.information(
             self, "How to run",
-            "Open the Process Route → select a trial → Open Channel Plot Window → "
-            "click 'Open MF-DFA (Overlapping)'."
+            "MF-DFA Overlap needs loaded iEEG data.\n\n"
+            "Recommended path:\n"
+            "1) Open Process Route\n"
+            "2) Select a trial and load the H5\n"
+            "3) Open Channel Plot Window\n"
+            "4) Click 'Open MF-DFA (Overlapping)'"
         )
-        # Optionally open the main route to get them there quicker:
-        if AppGUI is not None:
-            gui = AppGUI()
-            gui.show()
-            self.close()
-        return
-      QMessageBox.warning(self, "Error", "Overlapping MF-DFA window not available.")
 
+        # Optionally open main route for them
+        if AppGUI is not None:
+            self._open_window(AppGUI())
 
     def open_model_training(self):
-        if ModelTrainingWindow is not None:
-            self.model_training_route = ModelTrainingWindow()
-            self.model_training_route.show()
-            self.close()
-        else:
+        if ModelTrainingWindow is None:
             QMessageBox.warning(self, "Error", "Model training route window not available.")
+            return
+        self._open_window(ModelTrainingWindow())
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
