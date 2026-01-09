@@ -1,4 +1,4 @@
-# Quantifying-Cognitive-Effort-s-Impact-on-Suppression-of-Epilepsy-Associated-After-Discharges
+# Quantifying-Cognitive-Efforts-Impact-on-Suppression-of-Epilepsy-Associated-After-Discharges
 This project investigates how cognitive effort influences the suppression of epilepsy-associated after discharges (ADs) in intracranial EEG (iEEG) recordings collected during pre-surgical functional brain mapping. Using data from epileptic patients, the code reproduces all preprocessing, analysis, modeling pipelines presented in the paper.
 
 
