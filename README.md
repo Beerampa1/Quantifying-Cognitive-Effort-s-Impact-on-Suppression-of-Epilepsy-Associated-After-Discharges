@@ -94,3 +94,67 @@ This route is intended for **manual inspection**, **parameter tuning**, and **ex
 
 ```text
 master_features.csv
+```
+
+
+## FODN Analysis (Network Dynamics)
+
+### Core Logic
+- `utils/fodn_code.py`
+- `utils/fodn_utils.py`
+
+### GUI Components
+- `gui/fodn_analysis_window.py`
+- `gui/fodn_post_window.py`
+- `gui/eigen_vector_heatmap.py`
+
+### Outputs
+- Fractional orders (α)
+- Coupling matrices
+- Leading eigenvalues and eigenvectors
+- Sparsity and other network metrics
+
+These features characterize **network-level suppression dynamics** associated with cognitive effort.
+
+---
+
+## DFA / MF-DFA Analysis (Fractal Dynamics)
+
+### Core Logic
+- `utils/fast_mfdfa.py`  
+  *(NumPy / Numba accelerated for high performance)*
+
+### GUI Components
+- `gui/dfa_post_window.py`
+- `gui/mfdfa_analysis_window.py`
+- `gui/mfdfa_overlap_window.py`
+
+### Capabilities
+- Single-window DFA / MF-DFA
+- Overlapping (sliding-window) MF-DFA
+- Per-channel and per-segment summaries
+
+These analyses capture **scale-dependent signal complexity** in iEEG recordings.
+
+---
+
+## Model Training & Evaluation
+
+### Main File
+- `gui/model_training_window.py`
+
+### Workflow
+1. Load `master_features.csv`
+2. Select the label column
+3. Configure preprocessing:
+   - NaN handling
+   - Feature standardization
+4. Train a logistic regression model
+5. Display evaluation metrics:
+   - Accuracy
+   - ROC-AUC
+   - Confusion matrix
+   - Top contributing features
+
+This route validates whether extracted features can **predict AD suppression under cognitive effort**.
+
